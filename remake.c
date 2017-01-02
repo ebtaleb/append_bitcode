@@ -114,7 +114,10 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
         ncmds = mh->ncmds;
     }
 
-    bool foundsect = false;
+    bool foundsect, foundsect2 = false;
+    char *sectname2 = "__apple_objc";
+
+    uint32_t original_size = 0;
 
     /* Iterate through the mach-o's load commands */
     ITERCMDS(i, cmd, cmds, ncmds) {
@@ -146,7 +149,14 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                          sects[j].addr += data_size;
                                      }
 
+                                    if (foundsect2) {
+                                        printf("fixing VMA of %s from 0x%x to 0x%lx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));
+                                        /*sects[j].addr += data_size;*/
+                                        sects[j].addr += (data_size - original_size);
+                                    }
+
                                      printf(" sectname %s.%s off %u size %u\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
+                                     // macinfo seems to be empty most of the time
                                      if(strncmp(sects[j].sectname, sectname, 16) == 0) {
                                          foundsect = true;
                                          printf("found section %s,%s\n", segname, sectname);
@@ -165,10 +175,35 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                          sects[j].reserved1 = 0;
                                          sects[j].reserved2 = 0;
                                      }
+
+                                    if(strncmp(sects[j].sectname, sectname2, 16) == 0) {
+                                        // imageinfo is bigger than the data we want to insert
+                                        foundsect2 = true;
+                                        printf("found section %s,%s\n", segname, sectname2);
+
+                                        char stn[16] = "__cmdline";
+                                        char sgn[16] = "__LLVM";
+                                        memcpy(sects[j].sectname, stn, strlen(stn)+1);
+                                        memcpy(sects[j].segname, sgn, strlen(sgn)+1);
+                                        // leave VMA as it is
+                                        sects[j].size = data_size;
+                                        sects[j].offset = filesize;
+                                        sects[j].align = 0;
+                                        sects[j].reloff = 0;
+                                        sects[j].nreloc = 0;
+                                        sects[j].flags = 0;
+                                        sects[j].reserved1 = 0;
+                                        sects[j].reserved2 = 0;
+                                    }
                                  }
 
                                 // fixup the size of the segment
                                 if(foundsect) {
+                                    seg->vmsize += data_size;
+                                    seg->filesize += data_size;
+                                }
+
+                                if(foundsect2) {
                                     seg->vmsize += data_size;
                                     seg->filesize += data_size;
                                 }
@@ -186,6 +221,12 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                         if (foundsect) {
                                             printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size));
                                             sects[j].addr += data_size;
+                                        }
+
+                                        if (foundsect2) {
+                                            printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));
+                                            /*sects[j].addr += data_size;*/
+                                            sects[j].addr += (data_size - original_size);
                                         }
 
                                         printf(" sectname %s.%s off %u size %llu\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
@@ -207,10 +248,35 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                             sects[j].reserved1 = 0;
                                             sects[j].reserved2 = 0;
                                         }
+
+                                        if(strncmp(sects[j].sectname, sectname2, 16) == 0) {
+                                            foundsect2 = true;
+                                            original_size = sects[j].size;
+                                            printf("found section %s,%s\n", segname, sectname2);
+
+                                            char stn[16] = "__cmdline";
+                                            char sgn[16] = "__LLVM";
+                                            memcpy(sects[j].sectname, stn, strlen(stn)+1);
+                                            memcpy(sects[j].segname, sgn, strlen(sgn)+1);
+                                            // leave VMA as it is
+                                            sects[j].size = data_size;
+                                            sects[j].offset = filesize;
+                                            sects[j].align = 0;
+                                            sects[j].reloff = 0;
+                                            sects[j].nreloc = 0;
+                                            sects[j].flags = 0;
+                                            sects[j].reserved1 = 0;
+                                            sects[j].reserved2 = 0;
+                                        }
                                     }
 
                                     // fixup the size of the segment
                                     if(foundsect) {
+                                        seg->vmsize += data_size;
+                                        seg->filesize += data_size;
+                                    }
+
+                                    if(foundsect2) {
                                         seg->vmsize += data_size;
                                         seg->filesize += data_size;
                                     }
@@ -370,9 +436,9 @@ int main(int argc, const char *argv[]) {
 
     lseek(fd, filesize, SEEK_SET);
 
-	char n[1] = "\0";
+	char n = 0;
 	for (int i = padding_bytes; i > 0; i--) {
-		write(fd, n, 1);
+		write(fd, &n, 1);
 		newsize++;
 	}
 
