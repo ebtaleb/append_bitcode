@@ -90,7 +90,7 @@ __attribute__((format(printf, 1, 2))) bool ask(const char *format, ...) {
 	}
 }
 
-int replace_section(struct mach_header* mh, size_t filesize, const char* segname, const char* sectname, long data_size, const char *sgn, const char *stn) {
+int replace_section(struct mach_header* mh, size_t filesize, const char* segname, const char* sectname, long data_size, const char *sgn, const char *stn, int d2_opt) {
 
     bool is64bit = false;
 
@@ -115,8 +115,8 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
         ncmds = mh->ncmds;
     }
 
-    bool foundsect = false;
-    uint32_t original_size = 0;
+    int foundsect = -1;
+    uint32_t idx = 0;
 
     /* Iterate through the mach-o's load commands */
     ITERCMDS(i, cmd, cmds, ncmds) {
@@ -133,85 +133,91 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
         /* Process the load command */
         switch(cmd->cmd) {
             case LC_SEGMENT: {
+                             uint32_t vm_max = 0;
                              struct segment_command* seg = (struct segment_command*)cmd;
                              /*if(strncmp(seg->segname, segname, 16) == 0) {*/
                                  struct section* sects = (struct section*)&seg[1];
                                  for(uint32_t j = 0; j < seg->nsects; j++) {
 
-                                     // fix up all the sections that follows
-                                    if (foundsect) {
-                                        /*printf("fixing VMA of %s from 0x%x to 0x%lx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));*/
-                                        sects[j].addr += (data_size - original_size);
-                                    }
-
                                      printf(" sectname %s.%s off %u size %u\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
+                                     if (sects[j].addr + sects[j].size > 0) {
+                                         vm_max = sects[j].addr + sects[j].size;
+                                         idx = j;
+                                     }
 
                                      if(strncmp(sects[j].sectname, sectname, 16) == 0) {
-                                         foundsect = true;
-                                         original_size = sects[j].size;
-
+                                         foundsect = j;
                                          printf("found section %s,%s\n", segname, sectname);
-
-                                         memcpy(sects[j].sectname, stn, strlen(stn)+1);
-                                         memcpy(sects[j].segname, sgn, strlen(sgn)+1);
-                                         // leave VMA as it is
-                                         sects[j].size = data_size;
-                                         sects[j].offset = filesize;
-                                         sects[j].align = 0;
-                                         sects[j].reloff = 0;
-                                         sects[j].nreloc = 0;
-                                         sects[j].flags = 0;
-                                         sects[j].reserved1 = 0;
-                                         sects[j].reserved2 = 0;
                                      }
                                  }
 
                                 // fixup the size of the segment
-                                if(foundsect) {
+                                printf("max section is %s @ 0x%x\n", sects[idx].sectname, vm_max);
+                                if(foundsect >= 0) {
                                     seg->vmsize += data_size;
                                     seg->filesize += data_size;
+
+                                    memcpy(sects[foundsect].sectname, stn, strlen(stn)+1);
+                                    memcpy(sects[foundsect].segname, sgn, strlen(sgn)+1);
+                                    // leave VMA as it is
+                                    if (d2_opt <= 0) 
+                                        sects[foundsect].addr = vm_max;
+                                    else
+                                        sects[foundsect].addr = vm_max + d2_opt;
+                                    sects[foundsect].size = data_size;
+                                    sects[foundsect].offset = filesize;
+                                    sects[foundsect].align = 0;
+                                    sects[foundsect].reloff = 0;
+                                    sects[foundsect].nreloc = 0;
+                                    sects[foundsect].flags = 0;
+                                    sects[foundsect].reserved1 = 0;
+                                    sects[foundsect].reserved2 = 0;
                                 }
                              /*}*/
                              break;
                              }
 
             case LC_SEGMENT_64: {
+                                uint64_t vm_max = 0;
                                 struct segment_command_64* seg = (struct segment_command_64*)cmd;
                                 /*if(strncmp(seg->segname, segname, 16) == 0) {*/
                                     struct section_64* sects = (struct section_64*)&seg[1];
                                     for(uint32_t j = 0; j < seg->nsects; j++) {
 
-                                        // fix up all the sections that follows
-                                        if (foundsect) {
-                                            /*printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));*/
-                                            sects[j].addr += (data_size - original_size);
+                                        printf(" sectname %s.%s off %u addr 0x%llx size %llu\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].addr, sects[j].size);
+                                        if (sects[j].addr + sects[j].size > 0) {
+                                            vm_max = sects[j].addr + sects[j].size;
+                                            idx = j;
                                         }
 
-                                        printf(" sectname %s.%s off %u size %llu\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
-
                                         if(strncmp(sects[j].sectname, sectname, 16) == 0) {
-                                            foundsect = true;
-                                            original_size = sects[j].size;
+                                            foundsect = j;
                                             printf("found section %s,%s\n", segname, sectname);
-
-                                            memcpy(sects[j].sectname, stn, strlen(stn)+1);
-                                            memcpy(sects[j].segname, sgn, strlen(sgn)+1);
-                                            // leave VMA as it is
-                                            sects[j].size = data_size;
-                                            sects[j].offset = filesize;
-                                            sects[j].align = 0;
-                                            sects[j].reloff = 0;
-                                            sects[j].nreloc = 0;
-                                            sects[j].flags = 0;
-                                            sects[j].reserved1 = 0;
-                                            sects[j].reserved2 = 0;
                                         }
                                     }
 
                                     // fixup the size of the segment
-                                    if(foundsect) {
+                                    printf("max section is %s @ 0x%llx\n", sects[idx].sectname, vm_max);
+                                    if(foundsect >= 0) {
+                                        printf("wtf foundsect %d\n", foundsect);
                                         seg->vmsize += data_size;
                                         seg->filesize += data_size;
+
+                                        memcpy(sects[foundsect].sectname, stn, strlen(stn)+1);
+                                        memcpy(sects[foundsect].segname, sgn, strlen(sgn)+1);
+                                        // leave VMA as it is
+                                        if (d2_opt <= 0) 
+                                            sects[foundsect].addr = vm_max;
+                                        else
+                                            sects[foundsect].addr = vm_max + d2_opt;
+                                        sects[foundsect].size = data_size;
+                                        sects[foundsect].offset = filesize;
+                                        sects[foundsect].align = 0;
+                                        sects[foundsect].reloff = 0;
+                                        sects[foundsect].nreloc = 0;
+                                        sects[foundsect].flags = 0;
+                                        sects[foundsect].reserved1 = 0;
+                                        sects[foundsect].reserved2 = 0;
                                     }
 
                                 /*}*/
@@ -220,7 +226,7 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
         }
     }
 
-    if(!foundsect) {
+    if(foundsect < 0) {
         fprintf(stderr, "Unable to find section %s,%s!\n", segname, sectname);
         return -1;
     }
@@ -422,9 +428,9 @@ int main(int argc, const char *argv[]) {
 
 	// replace a LC of our choice with the data we want
     printf("data1 ofs : %zu @ 0x%lx, filesize = %ld, pad1 = %d\n", dsize, (filesize + padding_bytes), filesize, padding_bytes);
-    int ret1 = replace_section(map, (filesize + padding_bytes), "__DWARF", "__debug_macinfo", dsize, "__LLVM", "__bitcode");
+    int ret1 = replace_section(map, (filesize + padding_bytes), "__DWARF", "__debug_macinfo", dsize, "__LLVM", "__bitcode", -1);
     printf("data2 ofs : %zu @ 0x%lx, filesize = %ld, pad2 = %d\n", dsize2, (filesize + padding_bytes + dsize + padding_bytes2), filesize, padding_bytes2);
-    int ret2 = replace_section(map, (filesize + padding_bytes + dsize + padding_bytes2), "__DWARF", "__apple_objc", dsize2, "__LLVM", "__cmdline");
+    int ret2 = replace_section(map, (filesize + padding_bytes + dsize + padding_bytes2), "__DWARF", "__apple_objc", dsize2, "__LLVM", "__cmdline", dsize);
 
     /* Clean up */
     munmap(map, newsize);
