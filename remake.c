@@ -12,6 +12,7 @@
 #include <mach-o/loader.h>
 #include <mach-o/fat.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 /* Get the next load command from the current one */
 #define NEXTCMD(cmd) (struct load_command*)((char*)(cmd) + (cmd)->cmdsize)
@@ -38,7 +39,7 @@ static struct option long_options[] = {
 };
 
 __attribute__((noreturn)) void usage(void) {
-	printf("Usage: insert_segment data_path binary_path [new_binary_path] [comma_separated_section_list]\n");
+	printf("Usage: insert_segment data_path1 data_path2 binary_path [new_binary_path] [comma_separated_section_list]\n");
 
 	printf("Option flags:");
 
@@ -89,7 +90,7 @@ __attribute__((format(printf, 1, 2))) bool ask(const char *format, ...) {
 	}
 }
 
-int replace_section(struct mach_header* mh, size_t filesize, const char* segname, const char* sectname, long data_size) {
+int replace_section(struct mach_header* mh, size_t filesize, const char* segname, const char* sectname, long data_size, const char *sgn, const char *stn) {
 
     bool is64bit = false;
 
@@ -114,9 +115,7 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
         ncmds = mh->ncmds;
     }
 
-    bool foundsect, foundsect2 = false;
-    char *sectname2 = "__apple_objc";
-
+    bool foundsect = false;
     uint32_t original_size = 0;
 
     /* Iterate through the mach-o's load commands */
@@ -139,30 +138,20 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                  struct section* sects = (struct section*)&seg[1];
                                  for(uint32_t j = 0; j < seg->nsects; j++) {
 
-                                     for (int k = 0; k < MAX_SECTIONS; k++) {
-
-                                     }
-
                                      // fix up all the sections that follows
-                                     if (foundsect) {
-                                         printf("fixing VMA of %s from 0x%x to 0x%lx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size));
-                                         sects[j].addr += data_size;
-                                     }
-
-                                    if (foundsect2) {
-                                        printf("fixing VMA of %s from 0x%x to 0x%lx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));
-                                        /*sects[j].addr += data_size;*/
+                                    if (foundsect) {
+                                        /*printf("fixing VMA of %s from 0x%x to 0x%lx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));*/
                                         sects[j].addr += (data_size - original_size);
                                     }
 
                                      printf(" sectname %s.%s off %u size %u\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
-                                     // macinfo seems to be empty most of the time
+
                                      if(strncmp(sects[j].sectname, sectname, 16) == 0) {
                                          foundsect = true;
+                                         original_size = sects[j].size;
+
                                          printf("found section %s,%s\n", segname, sectname);
 
-                                         char stn[16] = "__bitcode";
-                                         char sgn[16] = "__LLVM";
                                          memcpy(sects[j].sectname, stn, strlen(stn)+1);
                                          memcpy(sects[j].segname, sgn, strlen(sgn)+1);
                                          // leave VMA as it is
@@ -175,35 +164,10 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                          sects[j].reserved1 = 0;
                                          sects[j].reserved2 = 0;
                                      }
-
-                                    if(strncmp(sects[j].sectname, sectname2, 16) == 0) {
-                                        // imageinfo is bigger than the data we want to insert
-                                        foundsect2 = true;
-                                        printf("found section %s,%s\n", segname, sectname2);
-
-                                        char stn[16] = "__cmdline";
-                                        char sgn[16] = "__LLVM";
-                                        memcpy(sects[j].sectname, stn, strlen(stn)+1);
-                                        memcpy(sects[j].segname, sgn, strlen(sgn)+1);
-                                        // leave VMA as it is
-                                        sects[j].size = data_size;
-                                        sects[j].offset = filesize;
-                                        sects[j].align = 0;
-                                        sects[j].reloff = 0;
-                                        sects[j].nreloc = 0;
-                                        sects[j].flags = 0;
-                                        sects[j].reserved1 = 0;
-                                        sects[j].reserved2 = 0;
-                                    }
                                  }
 
                                 // fixup the size of the segment
                                 if(foundsect) {
-                                    seg->vmsize += data_size;
-                                    seg->filesize += data_size;
-                                }
-
-                                if(foundsect2) {
                                     seg->vmsize += data_size;
                                     seg->filesize += data_size;
                                 }
@@ -219,43 +183,17 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
 
                                         // fix up all the sections that follows
                                         if (foundsect) {
-                                            printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size));
-                                            sects[j].addr += data_size;
-                                        }
-
-                                        if (foundsect2) {
-                                            printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));
-                                            /*sects[j].addr += data_size;*/
+                                            /*printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size - original_size));*/
                                             sects[j].addr += (data_size - original_size);
                                         }
 
                                         printf(" sectname %s.%s off %u size %llu\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
+
                                         if(strncmp(sects[j].sectname, sectname, 16) == 0) {
                                             foundsect = true;
+                                            original_size = sects[j].size;
                                             printf("found section %s,%s\n", segname, sectname);
 
-                                            char stn[16] = "__bitcode";
-                                            char sgn[16] = "__LLVM";
-                                            memcpy(sects[j].sectname, stn, strlen(stn)+1);
-                                            memcpy(sects[j].segname, sgn, strlen(sgn)+1);
-                                            // leave VMA as it is
-                                            sects[j].size = data_size;
-                                            sects[j].offset = filesize;
-                                            sects[j].align = 0;
-                                            sects[j].reloff = 0;
-                                            sects[j].nreloc = 0;
-                                            sects[j].flags = 0;
-                                            sects[j].reserved1 = 0;
-                                            sects[j].reserved2 = 0;
-                                        }
-
-                                        if(strncmp(sects[j].sectname, sectname2, 16) == 0) {
-                                            foundsect2 = true;
-                                            original_size = sects[j].size;
-                                            printf("found section %s,%s\n", segname, sectname2);
-
-                                            char stn[16] = "__cmdline";
-                                            char sgn[16] = "__LLVM";
                                             memcpy(sects[j].sectname, stn, strlen(stn)+1);
                                             memcpy(sects[j].segname, sgn, strlen(sgn)+1);
                                             // leave VMA as it is
@@ -276,10 +214,6 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                         seg->filesize += data_size;
                                     }
 
-                                    if(foundsect2) {
-                                        seg->vmsize += data_size;
-                                        seg->filesize += data_size;
-                                    }
                                 /*}*/
                                 break;
                             }
@@ -291,12 +225,44 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
         return -1;
     }
 
-    return 0;
+    return foundsect;
 }
 
 off_t tell(int fd)
 {
     return lseek(fd, 0, SEEK_CUR);
+}
+
+int getsize(const char *p) {
+    struct stat st;
+    stat(p, &st);
+    return st.st_size;
+}
+
+off_t append_data(int fd, int data, int filesize) {
+
+    uint32_t READ_BUFFER_SIZE = 512;
+
+	unsigned char mybuffer[READ_BUFFER_SIZE];
+
+	ssize_t bytesread = 0;
+	int newsize = filesize;
+
+    lseek(fd, filesize, SEEK_SET);
+
+	char n = 0;
+    while ((tell(fd) & 0xf) != 0) {
+		write(fd, &n, 1);
+		newsize++;
+	}
+
+	while ((bytesread = read(data, mybuffer, READ_BUFFER_SIZE)) > 0)
+	{
+		ssize_t written = write(fd, mybuffer, bytesread);
+		newsize += written;
+	}
+
+    return newsize;
 }
 
 int main(int argc, const char *argv[]) {
@@ -337,12 +303,13 @@ int main(int argc, const char *argv[]) {
 	argv = &argv[optind - 1];
 	argc -= optind - 1;
 
-	if(argc < 3 || argc > 4) {
+	if(argc < 4 || argc > 5) {
 		usage();
 	}
 
 	const char *data_path = argv[1];
-	const char *binary_path = argv[2];
+	const char *data_path2 = argv[2];
+	const char *binary_path = argv[3];
 
 	struct stat s;
 
@@ -357,11 +324,17 @@ int main(int argc, const char *argv[]) {
 		}
 	}
 
+	if(data_path2[0] != '@' && stat(data_path2, &s) != 0) {
+		if(!ask("The provided data path doesn't exist. Continue anyway?")) {
+			exit(1);
+		}
+	}
+
 	bool binary_path_was_malloced = false;
 	if(!inplace_flag) {
 		char *new_binary_path;
-		if(argc == 4) {
-			new_binary_path = (char *)argv[3];
+		if(argc == 5) {
+			new_binary_path = (char *)argv[4];
 		} else {
 			asprintf(&new_binary_path, "%s_patched", binary_path);
 			binary_path_was_malloced = true;
@@ -387,21 +360,23 @@ int main(int argc, const char *argv[]) {
         return -1;
     }
 
-    /* Get filesize for mmap */
-    size_t filesize = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-
     /* Get data to insert size */
     int data = open(data_path, O_RDONLY);
-
     if(!data) {
         printf("Couldn't open file %s\n", data_path);
         exit(1);
     }
 
-    lseek(data, 0, SEEK_END);
-    size_t dsize = tell(data);
-    lseek(data, 0, SEEK_SET);
+    int data2 = open(data_path2, O_RDONLY);
+    if(!data2) {
+        printf("Couldn't open file %s\n", data_path2);
+        exit(1);
+    }
+
+    /* Get filesize for mmap */
+    size_t filesize = getsize(binary_path);
+    size_t dsize = getsize(data_path);
+    size_t dsize2 = getsize(data_path2);
 
     printf("data size to insert : 0x%08zx\n", dsize);
 
@@ -415,6 +390,14 @@ int main(int argc, const char *argv[]) {
 	int padding_bytes = fsize - filesize;
     printf("new section will be at 0x%zx, with 0x%x more bytes of padding\n", fsize, padding_bytes);
 
+    fsize = filesize + padding_bytes + dsize;
+
+    while ((fsize & 0xf) != 0) {
+        fsize++;
+    }
+
+	int padding_bytes2 = (fsize - (filesize + padding_bytes + dsize));
+
     /* Map the file */
     void* map = mmap(NULL, filesize, PROT_WRITE, MAP_SHARED, fd, 0);
     if(map == MAP_FAILED) {
@@ -426,27 +409,8 @@ int main(int argc, const char *argv[]) {
 	bool success = true;
 
 	// append desired section
-
-#define READ_BUFFER_SIZE 512
-
-	unsigned char mybuffer[READ_BUFFER_SIZE];
-
-	ssize_t bytesread = 1;
-	int newsize = filesize;
-
-    lseek(fd, filesize, SEEK_SET);
-
-	char n = 0;
-	for (int i = padding_bytes; i > 0; i--) {
-		write(fd, &n, 1);
-		newsize++;
-	}
-
-	while ((bytesread = read(data, mybuffer, READ_BUFFER_SIZE)) > 0)
-	{
-		ssize_t written = write(fd, mybuffer, bytesread);
-		newsize += written;
-	}
+    int newsize = append_data(fd, data, filesize);
+    newsize = append_data(fd, data2, newsize);
 
 	munmap(map, filesize);
     map = mmap(NULL, newsize, PROT_WRITE, MAP_SHARED, fd, 0);
@@ -457,29 +421,16 @@ int main(int argc, const char *argv[]) {
     }
 
 	// replace a LC of our choice with the data we want
-    // this is where the (un)fun starts : 
-    // __debug_macinfo section choosen here is most of the time empty, so the one section preceding it and all the ones that follows it must have
-    // their VM fixed (add the size of the section being modified to their starting VM) so that the VM layout is corehent
-    //
-    // in a nutshell, one wants to turn that jtool output :
-    //
-    // 	Mem: 0x0000008a9-0x0000008d9		__DWARF.__debug_aranges	(Normal)
-	//  Mem: 0x000000000-0x00000000d		__LLVM.__bitcode
-	//  Mem: 0x0000008d9-0x000000d24		__DWARF.__debug_line	(Normal)
-	//  Mem: 0x000000d24-0x000000d47		__DWARF.__debug_loc	(Normal)
-    //
-    //  into:
-    //
-    // 	Mem: 0x0000008a9-0x0000008d9		__DWARF.__debug_aranges	(Normal)
-	//  Mem: 0x0000008d9-0x0000008e6		__LLVM.__bitcode
-	//  Mem: 0x0000008e6-0x000000d31		__DWARF.__debug_line	(Normal)
-	//  Mem: 0x000000d31-0x000000d54		__DWARF.__debug_loc	(Normal)
-    //
-    int ret = replace_section(map, filesize + padding_bytes, "__DWARF", "__debug_macinfo", dsize);
+    printf("data1 ofs : %zu @ 0x%lx, filesize = %ld, pad1 = %d\n", dsize, (filesize + padding_bytes), filesize, padding_bytes);
+    int ret1 = replace_section(map, (filesize + padding_bytes), "__DWARF", "__debug_macinfo", dsize, "__LLVM", "__bitcode");
+    printf("data2 ofs : %zu @ 0x%lx, filesize = %ld, pad2 = %d\n", dsize2, (filesize + padding_bytes + dsize + padding_bytes2), filesize, padding_bytes2);
+    int ret2 = replace_section(map, (filesize + padding_bytes + dsize + padding_bytes2), "__DWARF", "__apple_objc", dsize2, "__LLVM", "__cmdline");
 
     /* Clean up */
     munmap(map, newsize);
     close(fd);
+    close(data);
+    close(data2);
 
 	if(!success) {
 		if(!inplace_flag) {
@@ -492,5 +443,5 @@ int main(int argc, const char *argv[]) {
 		free((void *)binary_path);
 	}
 
-    return ret;
+    return ret1 & ret2;
 }

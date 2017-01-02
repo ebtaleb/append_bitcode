@@ -9,6 +9,7 @@ library=$1
 insert_source="remake.c"
 insert="../a.out"
 data_path="../test"
+data_path2="../test2"
 
 clang $insert_source
 
@@ -46,8 +47,8 @@ do
         do
             # apply bitcode section addition 
             echo "[+] $arch : adding bc to $obj"
-            $insert $data_path $obj $obj.new --candidates "huey,dewey,louie"
-            #$insert --inplace $data_path $obj --candidates "huey,dewey,louie"
+            #$insert $data_path $data_path2 $obj $obj.new --candidates "huey,dewey,louie"
+            $insert --inplace $data_path $data_path2 $obj --candidates "huey,dewey,louie"
             echo " "
         done
 
