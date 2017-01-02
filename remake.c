@@ -132,16 +132,22 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                  struct section* sects = (struct section*)&seg[1];
                                  for(uint32_t j = 0; j < seg->nsects; j++) {
 
+                                     // fix up all the sections that follows
+                                     if (foundsect) {
+                                         printf("fixing VMA of %s from 0x%x to 0x%lx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size));
+                                         sects[j].addr += data_size;
+                                     }
+
                                      printf(" sectname %s.%s off %u size %u\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
                                      if(strncmp(sects[j].sectname, sectname, 16) == 0) {
                                          foundsect = true;
+                                         printf("found section %s,%s\n", segname, sectname);
 
                                          char stn[16] = "__bitcode";
                                          char sgn[16] = "__LLVM";
                                          memcpy(sects[j].sectname, stn, strlen(stn)+1);
                                          memcpy(sects[j].segname, sgn, strlen(sgn)+1);
-                                         sects[j].addr = 0;
-                                        /*sects[j].addr = 0x8000;*/
+                                         // leave VMA as it is
                                          sects[j].size = data_size;
                                          sects[j].offset = filesize;
                                          sects[j].align = 0;
@@ -150,9 +156,14 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                          sects[j].flags = 0;
                                          sects[j].reserved1 = 0;
                                          sects[j].reserved2 = 0;
-                                         break;
                                      }
                                  }
+
+                                // fixup the size of the segment
+                                if(foundsect) {
+                                    seg->vmsize += data_size;
+                                    seg->filesize += data_size;
+                                }
                              /*}*/
                              break;
                              }
@@ -163,16 +174,22 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                     struct section_64* sects = (struct section_64*)&seg[1];
                                     for(uint32_t j = 0; j < seg->nsects; j++) {
 
+                                        // fix up all the sections that follows
+                                        if (foundsect) {
+                                            printf("fixing VMA of %s from 0x%llx to 0x%llx\n", sects[j].sectname, sects[j].addr, (sects[j].addr + data_size));
+                                            sects[j].addr += data_size;
+                                        }
+
                                         printf(" sectname %s.%s off %u size %llu\n", sects[j].segname, sects[j].sectname, sects[j].offset, sects[j].size);
                                         if(strncmp(sects[j].sectname, sectname, 16) == 0) {
                                             foundsect = true;
+                                            printf("found section %s,%s\n", segname, sectname);
 
                                             char stn[16] = "__bitcode";
                                             char sgn[16] = "__LLVM";
                                             memcpy(sects[j].sectname, stn, strlen(stn)+1);
                                             memcpy(sects[j].segname, sgn, strlen(sgn)+1);
-                                            sects[j].addr = 0;
-                                            /*sects[j].addr = 0x8000;*/
+                                            // leave VMA as it is
                                             sects[j].size = data_size;
                                             sects[j].offset = filesize;
                                             sects[j].align = 0;
@@ -181,19 +198,17 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                                             sects[j].flags = 0;
                                             sects[j].reserved1 = 0;
                                             sects[j].reserved2 = 0;
-
-                                            break;
                                         }
+                                    }
+
+                                    // fixup the size of the segment
+                                    if(foundsect) {
+                                        seg->vmsize += data_size;
+                                        seg->filesize += data_size;
                                     }
                                 /*}*/
                                 break;
                             }
-        }
-
-        /* Found the section we were looking for */
-        if(foundsect) {
-            printf("found section %s,%s\n", segname, sectname);
-            break;
         }
     }
 
@@ -355,6 +370,24 @@ int main(int argc, const char *argv[]) {
     }
 
 	// replace a LC of our choice with the data we want
+    // this is where the (un)fun starts : 
+    // __debug_macinfo section choosen here is most of the time empty, so the one section preceding it and all the ones that follows it must have
+    // their VM fixed (add the size of the section being modified to their starting VM) so that the VM layout is corehent
+    //
+    // in a nutshell, one wants to turn that jtool output :
+    //
+    // 	Mem: 0x0000008a9-0x0000008d9		__DWARF.__debug_aranges	(Normal)
+	//  Mem: 0x000000000-0x00000000d		__LLVM.__bitcode
+	//  Mem: 0x0000008d9-0x000000d24		__DWARF.__debug_line	(Normal)
+	//  Mem: 0x000000d24-0x000000d47		__DWARF.__debug_loc	(Normal)
+    //
+    //  into:
+    //
+    // 	Mem: 0x0000008a9-0x0000008d9		__DWARF.__debug_aranges	(Normal)
+	//  Mem: 0x0000008d9-0x0000008e6		__LLVM.__bitcode
+	//  Mem: 0x0000008e6-0x000000d31		__DWARF.__debug_line	(Normal)
+	//  Mem: 0x000000d31-0x000000d54		__DWARF.__debug_loc	(Normal)
+    //
     int ret = replace_section(map, filesize + padding_bytes, "__DWARF", "__debug_macinfo", dsize);
 
     /* Clean up */

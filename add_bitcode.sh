@@ -6,7 +6,6 @@ if [ "$#" -ne 1 ] || ! [ -e "$1" ]; then
 fi
 
 library=$1
-libtool="/usr/bin/libtool"
 insert_source="remake.c"
 insert="../a.out"
 data_path="../test"
@@ -17,7 +16,6 @@ archs=`lipo -info $library | sed "s/Architectures in the fat file: $library are:
 #echo $archs
 
 libname=${library%.*}
-#echo $libname
 
 otool -hl $library | grep __bitcode > /dev/null
 
@@ -39,7 +37,6 @@ do
 
         # extract lib archive
         ar -x ${arch_lib}.a
-        #rm ${arch_lib}.a
 
         # generate list of object files affected
         objfiles=(*.o)
@@ -51,6 +48,7 @@ do
             echo "[+] $arch : adding bc to $obj"
             #$insert $data_path $obj $obj.new
             $insert --inplace $data_path $obj
+            echo " "
         done
 
         arch_files=`ar -t ${arch_lib}.a`
@@ -77,6 +75,11 @@ cleanUp() {
             rm -rf $curr_arch
         fi
     done
+
+    
+    if [ -e "$libname" ]; then
+        rm $libname
+    fi
 }
 
 while true; do
@@ -88,10 +91,16 @@ while true; do
     esac
 done
 
-cd /Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader
+if [ -e "$libname" ]; then
+
+    cd /Users/elias/Desktop/hniosreader
     export IPHONEOS_DEPLOYMENT_TARGET=8.1
     export PATH="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/usr/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS10.2.sdk -L/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos -L/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/Appirater -L/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/Colours -L/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/MBProgressHUD -L/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/NJKWebViewProgress -L/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/SWRevealViewController -F/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos -F/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/hn -F/Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader -filelist /Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn.LinkFileList -Xlinker -rpath -Xlinker @executable_path/Frameworks -miphoneos-version-min=8.1 -dead_strip -Xlinker -object_path_lto -Xlinker /Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn_lto.o -fembed-bitcode -Xlinker -bitcode_verify -Xlinker -bitcode_hide_symbols -Xlinker -bitcode_symbol_map -Xlinker /Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos -fobjc-arc -fobjc-link-runtime -ObjC -lAppirater -lColours -lMBProgressHUD -lNJKWebViewProgress -lSWRevealViewController -framework CFNetwork -framework CoreGraphics -framework SystemConfiguration -weak_framework StoreKit -ObjC -framework SystemConfiguration -framework Security -framework CFNetwork -framework Firebase -lc++ -licucore -framework BuddyBuildSDK -framework AssetsLibrary -framework CoreText -framework CoreTelephony -lPods-hn -Xlinker -dependency_info -Xlinker /Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn_dependency_info.dat -o /Users/elias/Desktop/ixguard-testsuite/ObjC/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -arch armv7 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS10.2.sdk -L/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos -L/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/Appirater -L/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/Colours -L/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/MBProgressHUD -L/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/NJKWebViewProgress -L/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos/SWRevealViewController -F/Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos -F/Users/elias/Desktop/hniosreader/hn -F/Users/elias/Desktop/hniosreader -filelist /Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn.LinkFileList -Xlinker -rpath -Xlinker @executable_path/Frameworks -miphoneos-version-min=8.1 -dead_strip -Xlinker -object_path_lto -Xlinker /Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn_lto.o -fembed-bitcode -Xlinker -bitcode_verify -Xlinker -bitcode_hide_symbols -Xlinker -bitcode_symbol_map -Xlinker /Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/BuildProductsPath/Release-iphoneos -fobjc-arc -fobjc-link-runtime -ObjC -lAppirater -lColours -lMBProgressHUD -lNJKWebViewProgress -lSWRevealViewController -framework CFNetwork -framework CoreGraphics -framework SystemConfiguration -weak_framework StoreKit -ObjC -framework SystemConfiguration -framework Security -framework CFNetwork -framework Firebase -lc++ -licucore -framework BuddyBuildSDK -framework AssetsLibrary -framework CoreText -framework CoreTelephony -lPods-hn -Xlinker -dependency_info -Xlinker /Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn_dependency_info.dat -o /Users/elias/Desktop/hniosreader/DerivedData/hn/Build/Intermediates/ArchiveIntermediates/hn/IntermediateBuildFilesPath/hn.build/Release-iphoneos/hn.build/Objects-normal/armv7/hn
 
-cd -
+    cd -
+    #:
+fi
+
+
 
