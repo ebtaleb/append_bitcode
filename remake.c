@@ -19,22 +19,26 @@
 /* Iterate through all load commands */
 #define ITERCMDS(i, cmd, cmds, ncmds) for(i = 0, cmd = (cmds); i < (ncmds); i++, cmd = NEXTCMD(cmd))
 
+#define MAX_SECTIONS 4
+
 int inplace_flag = false;
 int overwrite_flag = false;
 int codesig_flag = 0;
 int yes_flag = false;
+char candidates[MAX_SECTIONS][16] = { {0} };
 
 static struct option long_options[] = {
-	{"inplace",          no_argument, &inplace_flag,   true},
-	{"overwrite",        no_argument, &overwrite_flag, true},
-	{"strip-codesig",    no_argument, &codesig_flag,   1},
-	{"no-strip-codesig", no_argument, &codesig_flag,   2},
-	{"all-yes",          no_argument, &yes_flag,       true},
-	{NULL,               0,           NULL,            0}
+	{"inplace",          no_argument,       &inplace_flag,   true},
+	{"overwrite",        no_argument,       &overwrite_flag, true},
+	{"strip-codesig",    no_argument,       &codesig_flag,   1},
+	{"no-strip-codesig", no_argument,       &codesig_flag,   2},
+	{"all-yes",          no_argument,       &yes_flag,       true},
+	{"candidates",       required_argument, NULL,            'c'},
+	{NULL,               0,                 NULL,            0}
 };
 
 __attribute__((noreturn)) void usage(void) {
-	printf("Usage: insert_segment data_path binary_path [new_binary_path]\n");
+	printf("Usage: insert_segment data_path binary_path [new_binary_path] [comma_separated_section_list]\n");
 
 	printf("Option flags:");
 
@@ -131,6 +135,10 @@ int replace_section(struct mach_header* mh, size_t filesize, const char* segname
                              /*if(strncmp(seg->segname, segname, 16) == 0) {*/
                                  struct section* sects = (struct section*)&seg[1];
                                  for(uint32_t j = 0; j < seg->nsects; j++) {
+
+                                     for (int k = 0; k < MAX_SECTIONS; k++) {
+
+                                     }
 
                                      // fix up all the sections that follows
                                      if (foundsect) {
@@ -238,6 +246,19 @@ int main(int argc, const char *argv[]) {
 		switch(c) {
 			case 0:
 				break;
+            case 'c': {
+                /*printf("option -c with value `%s'\n", optarg);*/
+                char *pt;
+                int i = 0;
+                pt = strtok(optarg, ",");
+                while (pt != NULL && i < MAX_SECTIONS) {
+                    /*printf("got %s\n", pt);*/
+                    strncpy(candidates[i], pt, strlen(pt));
+                    pt = strtok(NULL, ",");
+                    i++;
+                }
+                break;
+            }
 			case '?':
 				usage();
 				break;

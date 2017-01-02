@@ -47,7 +47,7 @@ do
             # apply bitcode section addition 
             echo "[+] $arch : adding bc to $obj"
             #$insert $data_path $obj $obj.new
-            $insert --inplace $data_path $obj
+            $insert --inplace $data_path $obj --candidates "huey,dewey,louie"
             echo " "
         done
 
